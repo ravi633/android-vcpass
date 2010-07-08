@@ -11,7 +11,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name="VCPassActivity">
+        <activity android:name="VCPassActivity" android:screenOrientation="portrait">
             <intent-filter>
                 <action android:name="org.ietfng.ns.android.vcpass.CHAL_PRESENT" />
                 <action android:name="org.ietfng.ns.android.vcpass.CHAL_CREATE" />

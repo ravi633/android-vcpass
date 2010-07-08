@@ -14,7 +14,7 @@ public final class
 VCPassImport
 extends Activity
 {
-    private static final boolean TRY_QRCODE = false;
+    private static final boolean TRY_QRCODE = true;
 
     /* * * * * * Protocol parameters * * * * * */
 
@@ -68,7 +68,7 @@ extends Activity
         intent.putExtra(VCPassActivity.EXTRA_CHALLENGE,cfpc);
         intent.putExtra(VCPassActivity.EXTRA_PROMPT_TEXT,
                     getString(R.string.import_test));
-        Log.d("VCPass", intent.toString());
+        Log.d(DBGN, intent.toString());
         startActivityForResult(intent, REQ_PRESENT);
     }
 
@@ -161,12 +161,19 @@ extends Activity
         finish();
     }
 
+	@Override
     public void onActivityResult(int req, int res, Intent data) {
+		super.onActivityResult(req, res, data);
+
         if(res == RESULT_CANCELED && req != REQ_PRESENT) {
-           setResult(RESULT_CANCELED, getIntent());
+			Log.d(DBGN, "CANCEL?");
+        	setResult(RESULT_CANCELED, getIntent());
+			finish();
+			return;
         }
         if(data == null) {
             // being canceled; report failure upstream
+			Log.d(DBGN, "Null data?");
             setResult(RESULT_CANCELED, null);
             finish();
             return;
@@ -185,6 +192,7 @@ extends Activity
                 cfpc = (Bitmap) data.getParcelableExtra(
                         VCPassActivity.EXTRA_CHALLENGE);
                 cfps = data.getStringExtra(VCPassActivity.EXTRA_SECRET);
+
                 launchChallenger();
                 break;
             case REQ_PRESENT:
@@ -224,32 +232,34 @@ extends Activity
 
         Log.i(DBGN, "CREATE");
 
+        String act = getIntent().getAction();
+        Log.d(DBGN, act);
+
         if(sis != null) {
             useed =          sis.getCharArray (SAVED_STATE_USEED);
             vseed =          sis.getCharArray (SAVED_STATE_VSEED);
             cfpc  = (Bitmap) sis.getParcelable(SAVED_STATE_CFPC );
             cfps  =          sis.getString    (SAVED_STATE_CFPS );
-        }
-
-        String act = getIntent().getAction();
-        Log.d(DBGN, act);
-
-        if (act.equals(ACTION_IMPORT_SEED)
-                || act.equals(ACTION_IMPORT_AND_CREATE)) {
-            importSeed();
-        } else {
-            setResult(RESULT_CANCELED, null);
-            finish();
-        }
+        } else { 
+        	if (act.equals(ACTION_IMPORT_SEED)
+    	            || act.equals(ACTION_IMPORT_AND_CREATE)) {
+	            importSeed();
+        	} else {
+            	setResult(RESULT_CANCELED, null);
+	            finish();
+    	    }
+		}
     }
 
     @Override
     public void onSaveInstanceState(Bundle outState) {
+
+        Log.i(DBGN, "onSaveInstanceState");
+
         outState.putCharArray (SAVED_STATE_USEED, useed);
         outState.putCharArray (SAVED_STATE_VSEED, vseed);
 
         outState.putParcelable(SAVED_STATE_CFPC , cfpc );
         outState.putString    (SAVED_STATE_CFPS , cfps );
     }
-
 }

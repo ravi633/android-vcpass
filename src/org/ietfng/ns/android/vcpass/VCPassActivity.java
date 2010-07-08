@@ -25,6 +25,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Message;
 import android.os.Parcelable;
 import android.util.Log;
@@ -145,9 +146,19 @@ extends Activity
 
     /* * * * * * Private state * * * * * */
 
-    private Resources res;                     // Android
-    private int[] response;                    // For state saving
-    private Thread calcThread;
+    private Resources res;          // Android
+    private int[] response;         // For state saving
+	private CalcState calcstate;	// For onRetainNonConfigurationInstance
+
+    private class CalcState {
+		Handler uih;			// UI thread waiting for results
+		VCPassActivity self;	// The object of the UI
+
+		Thread calcThread;		// The worker
+		Intent spawner;			// The intent which spawned it,
+								// also used as the callback intent.
+		String e;				// Error
+	};
 
     /* * * * * * Private utility functions * * * * * */
 
@@ -156,15 +167,6 @@ extends Activity
         s.putExtra(EXTRA_ERROR, e);
         setResult(RESULT_CANCELED, s);
         finish();
-    }
-
-    private final void
-    postYieldError(final Intent s, final String e) {
-        runOnUiThread(new Runnable(){
-            public final void run() {
-                yieldError(s,e);
-            }
-        });
     }
 
     /** Prepare an int array for use as a response store */
@@ -241,6 +243,32 @@ extends Activity
         }
     }
 
+	private static final void update_canvas_touch(
+		Canvas c,
+		Paint p,
+		int ix)
+	{
+		int x = ix % VCParameters.GRID_X;
+		int y = ix / VCParameters.GRID_X;
+
+        float w = c.getWidth();
+        float h = c.getHeight();
+
+        Rect sq = new Rect((int)(x*w
+                                /VCParameters.GRID_X
+                                ),
+                            (int)(y*h
+                                 /VCParameters.GRID_Y
+                                 ),
+                            (int)((x+1)*w
+                                 /VCParameters.GRID_X
+                                 ),
+                            (int)((y+1)*h
+                                 /VCParameters.GRID_Y
+                                 ));
+        c.drawRect(sq, p);
+	}
+
     private final class
     VCPassTouchHandler
     implements View.OnTouchListener {
@@ -248,11 +276,10 @@ extends Activity
         private Canvas c;
         private Paint p;
 
-        public VCPassTouchHandler(Canvas c, int[] r) {
+        public VCPassTouchHandler(Canvas c, Paint p, int[] r) {
             this.r = r;
             this.c = c;
-            p = new Paint();
-            p.setARGB(127,0,255,0);
+			this.p = p;
         }
 
         private int expected_motion = MotionEvent.ACTION_DOWN;
@@ -304,25 +331,13 @@ extends Activity
                         label = VCParameters.VCVOC_DISTING_UP;
                     }
                 }
-                r[VCParameters.GRID_X*last_down_y
-                 + last_down_x] = label;
+				int ix = VCParameters.GRID_X*last_down_y + last_down_x;
 
+				r[ix] = label;
                 expected_motion = MotionEvent.ACTION_DOWN;
 
-                Rect sq = new Rect((int)(last_down_x*w
-                                        /VCParameters.GRID_X
-                                        ),
-                                    (int)(last_down_y*h
-                                         /VCParameters.GRID_Y
-                                         ),
-                                    (int)((last_down_x+1)*w
-                                         /VCParameters.GRID_X
-                                         ),
-                                    (int)((last_down_y+1)*h
-                                         /VCParameters.GRID_Y
-                                         ));
-                Log.d("VCPTH", encodeResponse(r).toString());
-                c.drawRect(sq, p);
+                // Log.d("VCPTH", encodeResponse(r).toString());
+				update_canvas_touch(c,p,ix);
                 v.invalidate();
             } else {
                 throw new RuntimeException("Unexpected action:" + action + "\n");
@@ -398,25 +413,27 @@ extends Activity
             return;
         }
 
-        /*
-         * XXX Do we have to draw blanks here?  Does our graphic state
-         * get saved for us?
-         */
+        // Switch off the titlebar
+        // requestWindowFeature(Window.FEATURE_NO_TITLE);
+        // Load layout
+        setContentView(R.layout.vcpact);
+        // Lock orientation
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 
         Bitmap chal = origchal.copy(origchal.getConfig(), true);
         Canvas c = new Canvas(chal);
 
-        // Switch off the titlebar
-        // requestWindowFeature(Window.FEATURE_NO_TITLE);
-        // Lock orientation
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        // Load layout
-        setContentView(R.layout.vcpact);
+        Paint imgupdp = new Paint();
+        imgupdp.setARGB(127,0,255,0);
+
+		for(int ix = 0; ix < response.length; ix++) {
+			if(response[ix] != -1) { update_canvas_touch(c,imgupdp,ix); }
+		}
 
         ImageView imgview = (ImageView) findViewById(R.id.image);
         imgview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         imgview.setImageBitmap(chal);
-        imgview.setOnTouchListener(new VCPassTouchHandler(c, response));
+        imgview.setOnTouchListener(new VCPassTouchHandler(c, imgupdp, response));
         imgview.getViewTreeObserver()
                .addOnPreDrawListener(
                    new VCPassPreDrawListener(spawner, imgview, origchal));
@@ -551,50 +568,55 @@ extends Activity
 
 	}
 
-    private final void
-    _intent_createChallenge(final Intent spawner,
+    private static final void
+    _intent_createChallenge(final CalcState cs,
                         boolean quiet) {
-        char[] useed = spawner.getCharArrayExtra(EXTRA_USER_SLIDE_SEED   );
-        char[] vseed = spawner.getCharArrayExtra(EXTRA_VOCABULARY_SEED   );
-        int minevt   = spawner.getIntExtra      (EXTRA_MINIMUM_EVENTS, -1);
+        char[] useed = cs.spawner.getCharArrayExtra(EXTRA_USER_SLIDE_SEED   );
+        char[] vseed = cs.spawner.getCharArrayExtra(EXTRA_VOCABULARY_SEED   );
+        int minevt   = cs.spawner.getIntExtra      (EXTRA_MINIMUM_EVENTS, -1);
 
         if(useed == null || vseed == null) {
-            postYieldError(spawner, "Null seed");
+			cs.e = "Null seed";
+        	cs.calcThread = null;
+			synchronized(cs) {
+				cs.calcThread = null;
+				finishIfAnswered(cs);
+			}
             return;
         }
 
         final VCGenerator.ProgCallback pcb
         = quiet ? null : new VCGenerator.ProgCallback() {
             public void progress(final int x) {
-                    runOnUiThread(new Runnable() {
-                        public final void run() {
-                            getWindow().setFeatureInt(
-                                            Window.FEATURE_PROGRESS,
-                                            x*9000
-                                            /VCParameters.GRID_X
-                                            /VCParameters.GRID_Y);
-                        }
-                   });
+					if(cs.uih != null) {
+                    	cs.uih.post(new Runnable() {
+                        	public final void run() {
+                            	cs.self.getWindow().setFeatureInt(
+                                	            Window.FEATURE_PROGRESS,
+                                    	        x*9000
+                                        	    /VCParameters.GRID_X
+                                            	/VCParameters.GRID_Y);
+                        	}
+						});
+					}
             }
         };
 
 		CreatedChallenge cc = do_createChallenge(useed, vseed, minevt, pcb);
 		if(cc.error != null) {
-        	postYieldError(spawner, cc.error);
-			return;
+        	cs.e = cc.error;
+		} else {
+	        cs.spawner.putExtra(EXTRA_CHALLENGE, (Parcelable)cc.bm);
+    	    cs.spawner.putExtra(EXTRA_SECRET, cc.plain);
+        	Log.d("VCPassAct_i_cC", cc.plain);
+	        cs.calcThread = null;
 		}
 
-        spawner.putExtra(EXTRA_CHALLENGE, (Parcelable)cc.bm);
-        spawner.putExtra(EXTRA_SECRET, cc.plain);
-
-        calcThread = null;
-
-        runOnUiThread(new Runnable() {
-            final public void run() {
-                setResult(RESULT_OK, spawner);
-                finish();
-            }
-        });
+		synchronized(cs) {
+			// This will either work or, if we're UIless, will get
+			// picked up on resume when the UI starts back up again
+			finishIfAnswered(cs);
+		}
     }
 
     private final void
@@ -610,23 +632,57 @@ extends Activity
             setContentView(tv);
         }
 
-        calcThread = new Thread(new Runnable() {
-            public final void run() {
-                _intent_createChallenge(spawner, quiet);
-            }
-        });
+		Object glnci = getLastNonConfigurationInstance();
+		if(glnci != null) {
+			Log.d(DBGN, "glnci is nonnull, checking...");
+			calcstate = (CalcState) glnci;
+			synchronized(calcstate) {
+				calcstate.uih = new Handler();
+				calcstate.self = this;
+				finishIfAnswered(calcstate);
+			}
+		} else {
+			calcstate = new CalcState();
+			calcstate.spawner = spawner;
+			calcstate.uih = new Handler();
+			calcstate.self = this;
+        	calcstate.calcThread = new Thread(new Runnable() {
+	            public final void run() {
+    	            _intent_createChallenge(calcstate, quiet);
+        	    }
+			});
 
-        calcThread.start();
+   			calcstate.calcThread.start();
+		}
     }
 
     /* * * * * * Android interface core * * * * * */
+
+	private static void finishIfAnswered(final CalcState cs) {
+		Runnable r = null;
+		if(cs.uih == null) {
+			Log.d(DBGN, "Null cs.uih; can't finish now!");
+			return;
+		}
+		if(cs.e != null) {
+			r = new Runnable(){ public void run() {
+				cs.self.yieldError(cs.spawner,cs.e);
+			}};
+		} else if(cs.calcThread == null) {
+			r = new Runnable(){ public void run() {
+				cs.self.setResult(RESULT_OK, cs.spawner);
+				cs.self.finish();
+			}};
+		}
+		if(r != null) {
+			cs.uih.post(r);
+		}
+	}
 
     @Override
     public void onCreate(Bundle sis)
     {
         super.onCreate(sis);
-
-        Log.i(DBGN, "CREATE");
 
         res = getResources();
 
@@ -648,9 +704,20 @@ extends Activity
     public void onPause() {
         super.onPause();
 
-        if(isFinishing()) {
-            if(calcThread != null) { calcThread.interrupt(); }
-        }
+        Log.d(DBGN, "onPause");
+
+		if(calcstate != null) {
+			synchronized(calcstate) {
+				if(isFinishing()) {
+        			if(calcstate.calcThread != null) { 
+						calcstate.calcThread.interrupt();
+					}
+				}
+
+				finishIfAnswered(calcstate);
+				calcstate.uih = null;
+			}
+		}
     }
 
     @Override
@@ -662,4 +729,10 @@ extends Activity
             outState.putIntArray(SAVED_STATE_KEY_RESPONSE, response);
         }
     }
+
+	@Override
+	public Object onRetainNonConfigurationInstance() {
+		Log.d(DBGN, "ornci!");
+		return calcstate;
+	}
 }

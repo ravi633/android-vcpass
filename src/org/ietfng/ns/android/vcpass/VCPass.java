@@ -54,7 +54,7 @@ public class VCPass extends Activity
         Log.i("VCPass", "CREATE");
 
 
-		if(0) {
+		if(false) {
 			PackageManager pm = getPackageManager();
         	Intent intent = new Intent("org.ietfng.ns.android.vcpass.CHAL_PRESENT");
 			ResolveInfo ri = pm.resolveActivity(intent, 0);
