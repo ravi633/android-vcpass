@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+      package="org.ietfng.ns.android.vcpass"
+      android:versionCode="1"
+      android:versionName="1.0">
+    <application android:label="@string/app_name">
+        <activity android:name="VCPass"
+                  android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name="VCPassActivity">
+            <intent-filter>
+                <action android:name="org.ietfng.ns.android.vcpass.CHAL_PRESENT" />
+                <action android:name="org.ietfng.ns.android.vcpass.CHAL_CREATE" />
+                <category android:name="android.intent.category.DEFAULT" />
+        	</intent-filter>
+        </activity>
+        <activity android:name="VCPassImport">
+            <intent-filter>
+                <action android:name="org.ietfng.ns.android.vcpass.SEED_IMPORT" />
+                <action android:name="org.ietfng.ns.android.vcpass.IMPORT_AND_CREATE" />
+                <category android:name="android.intent.category.DEFAULT" />
+        	</intent-filter>
+        </activity>
+    </application>
+</manifest> 

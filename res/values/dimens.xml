@@ -1,0 +1,4 @@
+<resources>
+    <dimen name="chalX">320px</dimen>
+    <dimen name="chalY">320px</dimen>
+</resources>

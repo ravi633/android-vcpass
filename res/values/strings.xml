@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VCPass</string>
+    <string name="import_test">
+        To ensure that you have correctly imported the seeds,
+        please answer the above challenge.  The back button
+        will take you back to importing.
+    </string>
+</resources>
